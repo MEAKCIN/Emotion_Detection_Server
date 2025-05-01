@@ -1,0 +1,1 @@
+from .deneme import detect_emotion_from_image
