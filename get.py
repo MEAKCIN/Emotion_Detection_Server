@@ -2,7 +2,7 @@
 from flask import Flask, request, jsonify
 import base64
 import os
-import deneme
+import emotion_detection
 
 app = Flask(__name__)
 
@@ -11,7 +11,7 @@ UPLOAD_FOLDER = 'uploads'
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
-@app.route('/upload', methods=['POST'])
+@app.route('/upload-photo', methods=['POST'])
 def upload_photo():
     # Ensure the request contains JSON data
     if not request.is_json:
@@ -34,20 +34,72 @@ def upload_photo():
         # Decode the base64 string
         image_bytes = base64.b64decode(photo_data)
 
-        # Process image with the ʹdenemeʹ module
-        emotion = deneme.detect_emotion_from_image(image_bytes)
+        # Process image with the emotion_detection module
+        emotion = emotion_detection.detect_emotion_from_image(image_bytes)
         print(emotion)
+
+        # Read current device.txt values
+        try:
+            with open('device.txt', 'r', encoding='utf-8') as file:
+                device_data = file.read().strip()
+                spray_period, spray_duration, device_on, _ = device_data.split(',')
+        except Exception:
+            # If file doesn't exist or is invalid, use defaults
+            spray_period, spray_duration, device_on = '', '', ''
+
+        # Write updated values back to device.txt
+        with open('device.txt', 'w', encoding='utf-8') as file:
+            file.write(f"{spray_period},{spray_duration},{device_on},{emotion}\n")
 
         return jsonify({'message': 'Everything is okay', 'emotion': emotion}), 200
 
     except base64.binascii.Error as e:
         return jsonify({'error': f'Invalid base64 data: {str(e)}'}), 400
 
-@app.route('/upload_try', methods=['POST'])
-def upload_try():
-    print("Received request on /upload_try")
-    print(request.get_json())
-    return "completed", 200
+@app.route('/upload-manual', methods=['POST'])
+def upload_manual():
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No JSON body provided'}), 400
+
+    # Extract fields with defaults if missing
+    spray_period = data.get('sprayPeriod', '')
+    spray_duration = data.get('sprayDuration', '')
+    device_on = data.get('deviceOn', '')
+    current_emotion = data.get('currentEmotion', '')
+
+    # Create the line to write
+    line = f"{spray_period},{spray_duration},{device_on},{current_emotion}\n"
+
+    # Write to device.txt (overwrite)
+    with open('device.txt', 'w', encoding='utf-8') as f:
+        f.write(line)
+
+    return jsonify({'message': 'device.txt updated successfully'}), 200
+
+@app.route('/device', methods=['GET'])
+def get_device_data():
+    try:
+        with open('device.txt', 'r') as file:
+            data = file.read().strip()
+            # Split the comma-separated values
+            spray_period, spray_duration, device_on, current_emotion = data.split(',')
+            
+            # Create a response dictionary
+            response = {
+                'sprayPeriod': spray_period,
+                'sprayDuration': spray_duration,
+                'deviceOn': device_on,
+                'currentEmotion': current_emotion
+            }
+            
+            return jsonify(response), 200
+    except FileNotFoundError:
+        return jsonify({'error': 'device.txt file not found'}), 404
+    except ValueError:
+        return jsonify({'error': 'Invalid data format in device.txt'}), 400
+    except Exception as e:
+        return jsonify({'error': f'An error occurred: {str(e)}'}), 500
 
 if __name__ == '__main__':
     # Debug=True for development; disable or set to False for production
