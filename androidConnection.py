@@ -101,6 +101,3 @@ def get_device_data():
     except Exception as e:
         return jsonify({'error': f'An error occurred: {str(e)}'}), 500
 
-if __name__ == '__main__':
-    # Debug=True for development; disable or set to False for production
-    app.run(host='0.0.0.0', port=5000, debug=True)
