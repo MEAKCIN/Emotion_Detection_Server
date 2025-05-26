@@ -18,7 +18,7 @@ unsigned long lastFetchTime = 0;
 const int happyPin = 2;
 const int sadPin = 3;
 const int neutralPin = 4;
-const int angryPin = 5;
+const int surprisePin = 5;
 
 // --- Global Variables for API Data ---
 unsigned long sprayPeriodMinutes = 0;
@@ -32,17 +32,17 @@ unsigned long sprayDurationMillis = 0;
 unsigned long lastSprayTimeHappy = 0;
 unsigned long lastSprayTimeSad = 0;
 unsigned long lastSprayTimeNeutral = 0;
-unsigned long lastSprayTimeAngry = 0;
+unsigned long lastSprayTimeSurprise = 0;
 
 bool isSprayingHappy = false;
 bool isSprayingSad = false;
 bool isSprayingNeutral = false;
-bool isSprayingAngry = false;
+bool isSprayingSurprise = false;
 
 unsigned long sprayStartTimeHappy = 0;
 unsigned long sprayStartTimeSad = 0;
 unsigned long sprayStartTimeNeutral = 0;
-unsigned long sprayStartTimeAngry = 0;
+unsigned long sprayStartTimeSurprise = 0;
 
 WiFiClient client; // WiFiClient moved to global scope for simplicity in this structure
 
@@ -53,7 +53,7 @@ void setup() {
   pinMode(happyPin, OUTPUT);
   pinMode(sadPin, OUTPUT);
   pinMode(neutralPin, OUTPUT);
-  pinMode(angryPin, OUTPUT);
+  pinMode(surprisePin, OUTPUT);
   deactivateAllRelays(); // Relays are active-LOW
 
   if (WiFi.status() == WL_NO_MODULE) {
@@ -89,7 +89,7 @@ void loop() {
     isSprayingHappy = false;
     isSprayingSad = false;
     isSprayingNeutral = false;
-    isSprayingAngry = false;
+    isSprayingSurprise = false;
   } else {
     sprayPeriodMillis = sprayPeriodMinutes * 60000UL;
     sprayDurationMillis = sprayDurationSeconds * 1000UL;
@@ -97,7 +97,7 @@ void loop() {
     handleEmotionRelay(happyPin, currentEmotion, "Happy", lastSprayTimeHappy, isSprayingHappy, sprayStartTimeHappy);
     handleEmotionRelay(sadPin, currentEmotion, "Sad", lastSprayTimeSad, isSprayingSad, sprayStartTimeSad);
     handleEmotionRelay(neutralPin, currentEmotion, "Neutral", lastSprayTimeNeutral, isSprayingNeutral, sprayStartTimeNeutral);
-    handleEmotionRelay(angryPin, currentEmotion, "Angry", lastSprayTimeAngry, isSprayingAngry, sprayStartTimeAngry);
+    handleEmotionRelay(surprisePin, currentEmotion, "Surprise", lastSprayTimeSurprise, isSprayingSurprise, sprayStartTimeSurprise);
   }
 }
 
@@ -231,7 +231,7 @@ void deactivateAllRelays() {
   digitalWrite(happyPin, HIGH);    // HIGH deactivates an active-LOW relay
   digitalWrite(sadPin, HIGH);
   digitalWrite(neutralPin, HIGH);
-  digitalWrite(angryPin, HIGH);
+  digitalWrite(surprisePin, HIGH);
   // Serial.println("All relays DEACTIVATED (set to HIGH)"); // Less verbose during normal operation
 }
 
