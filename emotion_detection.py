@@ -7,10 +7,10 @@ emotion_map = {
     "neutral": "Neutral",
     "happy": "Happy",
     "sad": "Sad",
-    "angry": "Angry",
-    "fear": "Sad",     # Map fear to Sad
-    "disgust": "Angry",  # Map disgust to Angry
-    "surprise": "Happy"  # Map surprise to Happy
+    "surprise": "Surprise" ,
+    "fear": "Surprise",
+    "disgust": "Surprise",
+
 }
 
 def detect_emotion_from_image(image_bytes):
