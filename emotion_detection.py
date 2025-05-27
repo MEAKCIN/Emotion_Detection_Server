@@ -1,28 +1,9 @@
 import cv2
 from deepface import DeepFace
 import numpy as np
-
-# Define emotion mapping
-emotion_map = {
-    "neutral": "Neutral",
-    "happy": "Happy",
-    "sad": "Sad",
-    "surprise": "Surprise" ,
-    "fear": "Surprise",
-    "disgust": "Surprise",
-
-}
+import os
 
 def detect_emotion_from_image(image_bytes):
-    """
-    Detects emotion from a JPEG image.
-
-    Args:
-        image_bytes (bytes): The JPEG image as bytes.
-
-    Returns:
-        str: The detected emotion or an error message.
-    """
     try:
         # Convert bytes to a NumPy array and decode to an image
         nparr = np.frombuffer(image_bytes, np.uint8)
@@ -38,19 +19,28 @@ def detect_emotion_from_image(image_bytes):
         faces = face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5)
 
         if len(faces) == 0:
-            return "No face detected"
+            return {"error": "No face detected"}
 
         for (x, y, w, h) in faces:
             face = frame[y:y + h, x:x + w]  # Extract face ROI
 
-            # Analyze emotion only on detected face
-            result = DeepFace.analyze(face, actions=['emotion'], enforce_detection=False)
-            detected_emotion = result[0]['dominant_emotion']
+            # Analyze emotion, age and gender on detected face
+            result = DeepFace.analyze(face, actions=['emotion', 'age', 'gender'], enforce_detection=False)
 
-            # Map detected emotion to one of the 4 categories
-            emotion_label = emotion_map.get(detected_emotion, "Neutral")  # Default to Neutral
+            # Get all emotions with values > 1%
+            emotions = result[0]['emotion']
+            significant_emotions = {k: v for k, v in emotions.items() if v > 1}
 
-            return emotion_label
+            # Extract the required information
+            face_info = {
+                "emotions": significant_emotions,
+                "dominant_emotion": result[0]['dominant_emotion'],
+                "age": result[0]['age'],
+                "gender": result[0]['dominant_gender']
+            }
+
+            return face_info
 
     except Exception as e:
-        return f"Error: {str(e)}"
+        return {"error": f"Error: {str(e)}"}
+

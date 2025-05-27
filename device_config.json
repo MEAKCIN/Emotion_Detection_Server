@@ -1,0 +1,29 @@
+{
+  "deviceOn": true,
+  "emotions": [
+    {
+      "name": "Neutral",
+      "sprayPeriod": 1,
+      "sprayDuration": 1,
+      "isActive": false
+    },
+    {
+      "name": "Happy",
+      "sprayPeriod": 10,
+      "sprayDuration": 5,
+      "isActive": false
+    },
+    {
+      "name": "Angry",
+      "sprayPeriod": 17.508701,
+      "sprayDuration": 51,
+      "isActive": true
+    },
+    {
+      "name": "Sad",
+      "sprayPeriod": 20,
+      "sprayDuration": 49,
+      "isActive": true
+    }
+  ]
+}

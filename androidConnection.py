@@ -2,7 +2,8 @@
 from flask import Flask, request, jsonify
 import base64
 import os
-import emotion_detection
+import json
+import emotion_detection 
 
 app = Flask(__name__)
 
@@ -11,11 +12,36 @@ UPLOAD_FOLDER = 'uploads'
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
+# Define the path for the device configuration file
+DEVICE_CONFIG_FILE = 'device_config.json' # Using JSON format as requested
+
+def get_device_config():
+    """Reads device configuration from JSON file, creates a default if not found."""
+    try:
+        with open(DEVICE_CONFIG_FILE, 'r', encoding='utf-8') as f:
+            config_data = json.load(f)
+            # Ensure the loaded data has the expected top-level keys
+            if "deviceOn" not in config_data or "emotions" not in config_data:
+                print(f"Warning: {DEVICE_CONFIG_FILE} is missing expected keys. Using default structure.")
+                return {"deviceOn": False, "emotions": []}
+            return config_data
+    except FileNotFoundError:
+        # Default configuration if the file doesn't exist
+        return {"deviceOn": False, "emotions": []}
+    except json.JSONDecodeError:
+        print(f"Warning: {DEVICE_CONFIG_FILE} is corrupted or not valid JSON. Using default config.")
+        return {"deviceOn": False, "emotions": []}
+
+
+def save_device_config(config):
+    """Saves device configuration to JSON file."""
+    with open(DEVICE_CONFIG_FILE, 'w', encoding='utf-8') as f:
+        json.dump(config, f, indent=2) # Using indent=2 to match user's example format
+
 @app.route('/upload-photo', methods=['POST'])
 def upload_photo():
-    # Ensure the request contains JSON data
     if not request.is_json:
-        return jsonify({"error": "Request must be JSON"}), 415  # Use 415 for unsupported media type
+        return jsonify({"error": "Request must be JSON"}), 415
 
     data = request.get_json()
     if not data:
@@ -26,78 +52,100 @@ def upload_photo():
         return jsonify({'error': 'No photo field provided'}), 400
 
     try:
-        # Remove data URL header if present, e.g. "data:image/jpeg;base64,"
         if isinstance(photo_data, str) and photo_data.startswith("data:image"):
-            header, encoded_data = photo_data.split(',', 1)
-            photo_data = encoded_data  # Use only the base64 part
+            _, encoded_data = photo_data.split(',', 1)
+            photo_data = encoded_data
 
-        # Decode the base64 string
         image_bytes = base64.b64decode(photo_data)
 
-        # Process image with the emotion_detection module
-        emotion = emotion_detection.detect_emotion_from_image(image_bytes)
-        print(emotion)
+        # Calculate main emotions
+        from emotion_calculation import calculate_main_emotions
+        calculated_emotions = calculate_main_emotions(image_bytes)
+        print(f"Calculated emotions: {calculated_emotions}")
 
-        # Read current device.txt values
-        try:
-            with open('device.txt', 'r', encoding='utf-8') as file:
-                device_data = file.read().strip()
-                spray_period, spray_duration, device_on, _ = device_data.split(',')
-        except Exception:
-            # If file doesn't exist or is invalid, use defaults
-            spray_period, spray_duration, device_on = '', '', ''
+        if "error" in calculated_emotions:
+            return jsonify({'error': calculated_emotions["error"]}), 400
 
-        # Write updated values back to device.txt
-        with open('device.txt', 'w', encoding='utf-8') as file:
-            file.write(f"{spray_period},{spray_duration},{device_on},{emotion}\n")
+        # Convert np.float32 values to native float
+        calculated_emotions = {k: float(v) for k, v in calculated_emotions.items()}
 
-        return jsonify({'message': 'Everything is okay', 'emotion': emotion}), 200
+        # Update device_config.json based on calculated emotions
+        config = get_device_config()
+        for emotion_config in config["emotions"]:
+            emotion_name = emotion_config["name"].lower()
+            if emotion_name in calculated_emotions:
+                emotion_config["isActive"] = True
+                emotion_config["sprayDuration"] = round(calculated_emotions[emotion_name])
+            else:
+                emotion_config["isActive"] = False
+
+        save_device_config(config)
+
+        return jsonify({'message': 'Photo processed and device configuration updated', 'calculated_emotions': calculated_emotions}), 200
 
     except base64.binascii.Error as e:
         return jsonify({'error': f'Invalid base64 data: {str(e)}'}), 400
+    except Exception as e:
+        print(f"Error in /upload-photo: {str(e)}")
+        return jsonify({'error': f'An error occurred during photo processing: {str(e)}'}), 500
 
 @app.route('/upload-manual', methods=['POST'])
 def upload_manual():
+
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 415
+
     data = request.get_json()
+    print(f"Received data: {data}")  # Debugging line to see the received data
     if not data:
         return jsonify({'error': 'No JSON body provided'}), 400
 
-    # Extract fields with defaults if missing
-    spray_period = data.get('sprayPeriod', '')
-    spray_duration = data.get('sprayDuration', '')
-    device_on = data.get('deviceOn', '')
-    current_emotion = data.get('currentEmotion', '')
+    device_on = data.get('deviceOn')
+    emotions_settings = data.get('emotions')
 
-    # Create the line to write
-    line = f"{spray_period},{spray_duration},{device_on},{current_emotion}\n"
+    if device_on is None or not isinstance(device_on, bool):
+        return jsonify({'error': 'Invalid or missing "deviceOn" field (must be boolean)'}), 400
 
-    # Write to device.txt (overwrite)
-    with open('device.txt', 'w', encoding='utf-8') as f:
-        f.write(line)
+    if emotions_settings is None or not isinstance(emotions_settings, list):
+        return jsonify({'error': 'Invalid or missing "emotions" field (must be a list)'}), 400
 
-    return jsonify({'message': 'device.txt updated successfully'}), 200
+    for i, setting in enumerate(emotions_settings):
+        if not isinstance(setting, dict):
+            return jsonify({'error': f'Emotion setting at index {i} is not a valid object.'}), 400
+        if not all(k in setting for k in ("name", "sprayPeriod", "sprayDuration", "isActive")):
+            return jsonify({'error': f'Emotion setting at index {i} is missing one or more required keys (name, sprayPeriod, sprayDuration, isActive)'}), 400
+        # Further type checks for each field within an emotion object can be added here if desired
+        if not isinstance(setting.get("name"), str):
+             return jsonify({'error': f'Emotion setting "name" at index {i} must be a string.'}), 400
+        if not isinstance(setting.get("sprayPeriod"), (int, float)): # Allowing int or float
+             return jsonify({'error': f'Emotion setting "sprayPeriod" at index {i} must be a number.'}), 400
+        if not isinstance(setting.get("sprayDuration"), (int, float)): # Allowing int or float
+             return jsonify({'error': f'Emotion setting "sprayDuration" at index {i} must be a number.'}), 400
+        if not isinstance(setting.get("isActive"), bool):
+             return jsonify({'error': f'Emotion setting "isActive" at index {i} must be a boolean.'}), 400
+
+    try:
+        # Create the new configuration directly from the input
+        new_config = {
+            "deviceOn": device_on,
+            "emotions": emotions_settings
+        }
+        save_device_config(new_config)
+        return jsonify({'message': 'Device configuration updated successfully'}), 200
+    except Exception as e:
+        print(f"Error in /upload-manual: {str(e)}")
+        return jsonify({'error': f'An error occurred: {str(e)}'}), 500
+
 
 @app.route('/device', methods=['GET'])
 def get_device_data():
     try:
-        with open('device.txt', 'r') as file:
-            data = file.read().strip()
-            # Split the comma-separated values
-            spray_period, spray_duration, device_on, current_emotion = data.split(',')
-            
-            # Create a response dictionary
-            response = {
-                'sprayPeriod': spray_period,
-                'sprayDuration': spray_duration,
-                'deviceOn': device_on,
-                'currentEmotion': current_emotion
-            }
-            
-            return jsonify(response), 200
-    except FileNotFoundError:
-        return jsonify({'error': 'device.txt file not found'}), 404
-    except ValueError:
-        return jsonify({'error': 'Invalid data format in device.txt'}), 400
+        config = get_device_config() # This will return the dict with "deviceOn" and "emotions"
+        return jsonify(config), 200
     except Exception as e:
+        print(f"Error in /device: {str(e)}")
         return jsonify({'error': f'An error occurred: {str(e)}'}), 500
 
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
